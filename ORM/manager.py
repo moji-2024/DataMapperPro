@@ -1,5 +1,5 @@
-import sqlDB
-import models
+from . import sqlDB
+from . import models
 # import table_class
 data_types = {
     "NULL",      # Python equivalent: None
@@ -20,18 +20,26 @@ class manager(object):
     #     for db in dbs:
     #         self.dbs.setdefault(db,{})
     @staticmethod
-    def create_tabels():
+    def create_tables(replace_flag=False):
         classes_attrs = models.model._dict_childClassName_dictAttrObjs
         for class_name , dict_attr_obj in classes_attrs.items():
+            if sqlDB.check_table_exists('map_db', class_name):
+                if replace_flag == True:
+                    sqlDB.drop_table('map_db', class_name)
+                else:
+                    continue
             sqlDB.tabel_maker4(class_name, 'map_db')
             for attr_name, value_class_obj in dict_attr_obj.items():
-                if value_class_obj.name == 'ForeignKey':
+                if value_class_obj.class_name == 'ForeignKey':
                     attr_name += '_id'
-                elif value_class_obj.name == 'ManyToManyField':
+                elif value_class_obj.class_name == 'ManyToManyField':
                     sqlDB.tabel_maker4(class_name + '_' + value_class_obj.to.__name__, 'map_db',
                                        class_name + '_id' + ' INTEGER',
                                        value_class_obj.to.__name__ + '_id' + ' INTEGER')
                     continue
+                elif value_class_obj.class_name == 'OneToOneField':
+                    attr_name += '_id'
+                    sqlDB.add_col('map_db', value_class_obj.to.__name__, class_name + '_id', dType=value_class_obj.dtype)
                 sqlDB.add_col('map_db', class_name, attr_name, dType=value_class_obj.dtype)
         print('all tables created')
     def make_tabels(self,classes_contain_classname_And_Class):

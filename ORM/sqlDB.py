@@ -1,146 +1,53 @@
 import sqlite3
 
 
-# def tabel_maker(tabel_name):
-#     conn = sqlite3.connect('sample.db')
-#     cur = conn.cursor()
-#     cur.execute(
-#         f'create table if not exists {tabel_name} (Receipt_num integer primary key not null ,Date_Recieved text,Time_Recieved text,Item_Description text, Repair_Type text, Max_Pick_Up_Date text, Customer_Name text, Customer_Phone text, Price_Estimate text)')
-#     conn.commit()
-#     conn.close()
-#
-#
-# def insert(tabel_name, Date_Recieved='', Time_Recieved='', Item_Description='', Repair_Type='', Max_Pick_Up_Date='',
-#            Customer_Name='', Customer_Phone='', Price_Estimate=''):
-#     conn = sqlite3.connect('sample.db')
-#     cur = conn.cursor()
-#     cur.execute(f'insert into {tabel_name} values (null,?,?,?,?,?,?,?,?)', (
-#     Date_Recieved, Time_Recieved, Item_Description, Repair_Type, Max_Pick_Up_Date, Customer_Name, Customer_Phone,
-#     Price_Estimate))
-#     conn.commit()
-#     conn.close()
-#
-#
-# def view(tabel_name):
-#     conn = sqlite3.connect('sample.db')
-#     cur = conn.cursor()
-#     cur.execute(f'select * from {tabel_name}')
-#     result = cur.fetchall()
-#     conn.close()
-#     return result
-#
-#
-# def truncate(tabel_name):
-#     conn = sqlite3.connect('sample.db')
-#     cur = conn.cursor()
-#     cur.execute(f'delete from {tabel_name}')
-#     conn.commit()
-#     conn.close()
-#
-#
-# def delete(tabel_name, Receipt_num):
-#     conn = sqlite3.connect('sample.db')
-#     cur = conn.cursor()
-#     cur.execute(f'delete from {tabel_name} where Receipt_num = ?', (Receipt_num,))
-#     conn.commit()
-#     conn.close()
-#
-#
-# def tabel_maker2(tabel_name, *args):
-#     conn = sqlite3.connect('sample2.db')
-#     cur = conn.cursor()
-#     cur.execute(f'create table if not exists {tabel_name} (id integer primary key not null,seller text)')
-#     conn.commit()
-#     conn.close()
-#
-#
-# def insert2(tabel_name, seller):
-#     conn = sqlite3.connect('sample2.db')
-#     cur = conn.cursor()
-#     cur.execute(f'insert into {tabel_name} values (null,?)', (seller,))
-#     conn.commit()
-#     conn.close()
-#
-#
-# def delete2(tabel_name, id=None, seller=''):
-#     conn = sqlite3.connect('sample2.db')
-#     cur = conn.cursor()
-#     cur.execute(f'delete from {tabel_name} where seller = ? or id = ?', (seller, id))
-#     conn.commit()
-#     conn.close()
-#
-#
-# def view2(tabel_name):
-#     conn = sqlite3.connect('sample2.db')
-#     cur = conn.cursor()
-#     cur.execute(f'select * from {tabel_name}')
-#     result = cur.fetchall()
-#     conn.close()
-#     return result
-#
-#
-# def search2(tabel_name, seller):
-#     conn = sqlite3.connect('sample2.db')
-#     cur = conn.cursor()
-#     cur.execute(f'select * from {tabel_name} where seller = ?', (seller,))
-#     result = cur.fetchall()
-#     conn.close()
-#     return result
-#
-#
-# def tabel_maker3(tabel_name, *args):
-#     conn = sqlite3.connect('sample2.db')
-#     cur = conn.cursor()
-#     args_str = ""
-#     for i in args:
-#         args_str += i + ","
-#     args_str = args_str[:-1]
-#     cur.execute(f'create table if not exists {tabel_name} (id_ integer primary key ,{args_str})')
-#     conn.commit()
-#     conn.close()
-#
-#
-# def insert3(tabel_name, *args):
-#     ques = ''
-#     for i in args:
-#         ques += "?,"
-#     ques = ques.replace(ques, ques[:-1])
-#     conn = sqlite3.connect('sample2.db')
-#     cur = conn.cursor()
-#     cur.execute(f'insert into {tabel_name} values (null,{ques})', args)
-#     conn.commit()
-#     conn.close()
-#
-#
-# def delete3(tabel_name):
-#     conn = sqlite3.connect('sample2.db')
-#     cur = conn.cursor()
-#     cur.execute(f'delete from {tabel_name}')
-#     conn.commit()
-#     conn.close()
-
-
 # -----------------------------------------------------------------------------------------------
 def make_connection(db):
     conn = sqlite3.connect(f'{db}.db')
     # Create a cursor object
     cursor = conn.cursor()
     return conn, cursor
-
+def return_condition_rule_from_str(column_str):
+    condition_rule = ''
+    list_key_splited = column_str.split('__')
+    if 'contains' in list_key_splited:
+        condition_rule = 'contains'
+    elif 'operator' in list_key_splited:
+        condition_rule = 'operator'
+    return condition_rule,list_key_splited[0]
 def create_query_by_colValue_relatedCol_condition(related_col='and',**col_vlues):
     list_col_val_str = []
     params = []
-    queri = ""
-    for col, value in col_vlues.items():
-        if isinstance(value, (tuple, list)):
-            placeholders = ','.join(['?' for _ in value])
-            list_col_val_str.append(f"{col} IN ({placeholders})")
-            params.extend(value)
+    for pre_process_column, value_or_values in col_vlues.items():
+        condition_rule,column = return_condition_rule_from_str(pre_process_column)
+        if condition_rule == 'contains':
+            if isinstance(value_or_values, list):
+                # iterable of value_or_values
+                column_conditions = [f"{column} LIKE ?" for _ in value_or_values]
+                list_col_val_str.append(f"({' OR '.join(column_conditions)})")
+                params.extend([f"%{substring}%" for substring in value_or_values])
+            elif isinstance(value_or_values, str):
+                # Single substring
+                list_col_val_str.append(f"{column} LIKE ?")
+                params.append(f"%{value_or_values}%")
+        elif condition_rule == 'operator':
+            if isinstance(value_or_values, tuple) and len(value_or_values) == 2:
+                # Comparison operator and float number
+                operator, number = value_or_values
+                if operator in ('<', '>', '<=', '>=', '='):
+                    list_col_val_str.append(f"{column} {operator} ?")
+                    params.append(number)
+
         else:
-            list_col_val_str.append(f"{col} = ?")
-            params.append(value)
-    queri += f' {related_col} '.join(list_col_val_str)
-    return queri ,params
+            if isinstance(value_or_values, (tuple, list)):
+                placeholders = ','.join(['?' for _ in value_or_values])
+                list_col_val_str.append(f"{column} IN ({placeholders})")
+                params.extend(value_or_values)
+            else:
+                list_col_val_str.append(f"{column} = ?")
+                params.append(value_or_values)
+    where_clause = f" {related_col} ".join(list_col_val_str)
+    return where_clause ,params
 
 def get_tableName_and_columnsFromDBmaster(db):
     conn, cursor = make_connection(db)
@@ -224,6 +131,7 @@ def insert4(tabel_name, db, *args, **kwargs):
         columns = ','.join([col for col in kwargs.keys()])
         args = tuple(kwargs.values())
         ques = ','.join(['?' for _ in args])
+        # print(f'insert into {tabel_name} ({columns}) values ({ques})', args)
         cursor.execute(f'insert into {tabel_name} ({columns}) values ({ques})', args)
     else:
         ques = ','.join(['?' for _ in args])
@@ -240,33 +148,34 @@ def delete4(table_name, db,related_col='and', **col_vlues):
     if col_vlues == {}:
         conn, cursor = make_connection(db)
         cursor.execute(f"SELECT rowid FROM {table_name}")
-        rows = cursor.fetchall()
+        rows_id = cursor.fetchall()
         cursor.execute(f"DELETE FROM {table_name}")
         conn.commit()
         conn.close()
-        return rows
+        return [id_[0] for id_ in rows_id]
     queri , params = create_query_by_colValue_relatedCol_condition(related_col=related_col, **col_vlues)
     conn, cursor = make_connection(db)
+    # print(f"SELECT rowid FROM {table_name} WHERE {queri}",params)
     cursor.execute(f"SELECT rowid FROM {table_name} WHERE {queri}", params)
-    rows = cursor.fetchall()
+    rows_id = cursor.fetchall()
 
-    if rows is []:
+    if rows_id is []:
         # No matching row found, nothing to delete
         conn.close()
-        return None
+        return [id_[0] for id_ in rows_id]
 
 
     # Perform the deletion
     cursor.execute(f"DELETE FROM {table_name} WHERE {queri}", params)
     conn.commit()
     conn.close()
-    return rows
+    return [id_[0] for id_ in rows_id]
 
 
 
 
 
-def view4(table_name, db, sort_by=None, **col_val):
+def view4(table_name, db, sort_by=None,related_col='and',filter_kind='', **col_vlues):
     """
     Query a database table based on provided column-value pairs and additional conditions.
 
@@ -280,25 +189,14 @@ def view4(table_name, db, sort_by=None, **col_val):
         tuple: A tuple containing the query result and column names.
     """
     search_into_columns = 'WHERE '
-    list_col_val_str = []
-    params = []
-    for col, value in col_val.items():
-        if value is not None:
-            if isinstance(value, (tuple, list)):
-                placeholders = ','.join(['?' for _ in value])
-                list_col_val_str.append(f"{col} IN ({placeholders})")
-                params.extend(value)
-            else:
-                list_col_val_str.append(f"{col} = ?")
-                params.append(value)
-
-    search_into_columns += ' AND '.join(list_col_val_str)
-
+    where_clause, params = create_query_by_colValue_relatedCol_condition(related_col=related_col,**col_vlues)
+    search_into_columns += where_clause
     if search_into_columns == 'WHERE ':
         search_into_columns = ''
 
     if sort_by:
         search_into_columns += f" {sort_by}"
+
 
     sql_command = f'SELECT * FROM {table_name} {search_into_columns}'
 
@@ -313,11 +211,11 @@ def view4(table_name, db, sort_by=None, **col_val):
 
 
 
-def search4(tabel_name, db,related_col='and', **col_vlues):
-    queri, params = create_query_by_colValue_relatedCol_condition(related_col=related_col, **col_vlues)
+def search4(table_name, db,related_col='and', **col_vlues):
+    where_clause, params = create_query_by_colValue_relatedCol_condition(related_col=related_col, **col_vlues)
     conn, cursor = make_connection(db)
-    # print(f'select * from {tabel_name} where {queri} ',tuple(params))
-    cursor.execute(f'select * from {tabel_name} where {queri} ', tuple(params))
+    # print(f'-- select * from {table_name} where {where_clause} ',tuple(params))
+    cursor.execute(f'select * from {table_name} where {where_clause} ', tuple(params))
     columns = [description[0] for description in cursor.description]
     result = cursor.fetchall()
     conn.close()
@@ -380,42 +278,3 @@ def drop_col(db, table_name, col_name):
     cursor.execute(f"ALTER TABLE {table_name} DROP COLUMN {col_name}")
     conn.commit()
     conn.close()
-
-# tabel_maker4('mytable','mydb','col1 integer', 'col2 varchar(60)')
-# insert4('mytable','mydb',22,'ll')
-# insert4('mytable','mydb',55,'tt')
-# insert4('mytable','mydb',55,'dj')
-# insert4('mytable','mydb',46,'dj')
-# insert4('mytable','mydb',78,'dj')
-# print(view4('mytable','mydb'))
-# print(delete4('mytable','mydb'))
-
-# drop_col('mydb','mytable','col2')
-
-# rows , cols = view4('product','map_db')
-# print('rows',rows)
-# print('cols',cols)
-# update('map_db','product','id_ = 1',title='shirt')
-# tabel_maker4('tabel_test','dbTest')
-# add_col('dbTest','tabel_test','newCol','integer')
-
-# print(dec.items())
-# print(search4('period','date_record' ,date_='>= 2023-12-06',name= '= Fatemeh'))
-# print(search4('period','date_record',name='',time_='>= 11:56:07'))
-# print(view4('period','date_record'))
-# delete4('period','date_record',time_='11:56:07')
-# print(view4('period','date_record'))
-# tabel_maker2('seller')
-# tabel_maker3('shoes','seller_name text','model_shoe text','quantity integer','price flaot', 'time text')
-# tabel_maker('tabel1')
-# insert('tabel1',6)
-# insert('tabel1')
-# insert('tabel1')
-# update('tabel1',4)
-# print(view2('shoes'))
-
-# update('map_db', 'product', f'id_ = {15}', title= 'test16',price=11414)
-#
-# rows,columns = search4('product', 'map_db',category_id= 2)
-# print(rows)
-# print(columns)
